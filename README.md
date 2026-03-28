@@ -1,0 +1,430 @@
+[index (11).html](https://github.com/user-attachments/files/26322331/index.11.html)
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>淺色系全景搜尋樹 - 過河謎題</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f9;
+            --panel-bg: #ffffff;
+            --text-main: #2c3e50;
+            --text-muted: #7f8c8d;
+            --border-color: #e0e6ed;
+            
+            /* 狀態顏色配置 - 淺色柔和風格 */
+            --color-frontier: #3498db; /* 邊界：藍色 */
+            --color-explored: #2ecc71; /* 已探索：綠色 */
+            --color-invalid: #e74c3c;  /* 違規：紅色 */
+            --color-visited: #bdc3c7;  /* 重複：灰色 */
+            --color-goal: #f39c12;     /* 目標解：金色 */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 15px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* 讓整體內容置中 */
+            box-sizing: border-box;
+        }
+
+        .header-section { text-align: center; margin-bottom: 15px; }
+        h1 { color: #2980b9; margin: 0 0 5px 0; font-size: 24px; }
+        .subtitle { color: var(--text-muted); font-size: 14px; }
+
+        /* ★ 修改重點：給定明確的高度與最大寬度，解決消失與過大問題 */
+        .dashboard {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 900px; /* 限制寬度，讓面板看起來較小且偏正方形 */
+            height: 420px;    /* 明確的高度，確保轉成連結時 Canvas 不會高度為 0 */
+            margin-bottom: 20px;
+        }
+
+        .panel {
+            flex: 1;
+            background: var(--panel-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+        }
+
+        .panel-header {
+            padding: 10px 15px;
+            background-color: #fcfcfc;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h2 { margin: 0; font-size: 16px; color: #34495e; }
+
+        .stats-badge {
+            background: #eef2f5;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #576574;
+            font-weight: 600;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: #fdfdfd;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ★ 同步限制控制列的寬度，保持版面整齊 */
+        .control-bar {
+            width: 100%;
+            max-width: 900px;
+            box-sizing: border-box;
+            background: var(--panel-bg);
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid var(--border-color);
+        }
+
+        button {
+            background: #2980b9;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        button:hover:not(:disabled) { background: #2471a3; transform: translateY(-1px); }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; transform: none; }
+
+        .legend { display: flex; gap: 12px; }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #555; font-weight: 500; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+    </style>
+</head>
+<body>
+
+    <div class="header-section">
+        <h1>🌳 自動適應視窗的搜尋樹：A* vs BFS</h1>
+        <div class="subtitle">線條與節點會自動縮放，確保全局動態皆在正方形面板內清楚呈現</div>
+    </div>
+
+    <div class="dashboard">
+        <div class="panel">
+            <div class="panel-header">
+                <h2>廣度優先搜尋 (BFS)</h2>
+                <div class="stats-badge" id="bfs-stats">探索: 0 | 深度: 0</div>
+            </div>
+            <div class="canvas-container">
+                <canvas id="canvas-bfs"></canvas>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2>啟發式搜尋 (A* Search)</h2>
+                <div class="stats-badge" id="astar-stats">探索: 0 | 深度: 0</div>
+            </div>
+            <div class="canvas-container">
+                <canvas id="canvas-astar"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="control-bar">
+        <div>
+            <button id="startBtn" onclick="startSearch()">▶ 雙引擎同步推演</button>
+            <button onclick="location.reload()" style="background: #95a5a6; margin-left: 10px;">🔄 重新整理</button>
+        </div>
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background: var(--color-frontier);"></div> 邊界 (Frontier)</div>
+            <div class="legend-item"><div class="dot" style="background: var(--color-explored);"></div> 已探索 (Explored)</div>
+            <div class="legend-item"><div class="dot" style="background: var(--color-invalid);"></div> 違規 (Invalid)</div>
+            <div class="legend-item"><div class="dot" style="background: var(--color-visited);"></div> 重複 (Visited)</div>
+            <div class="legend-item"><div class="dot" style="background: var(--color-goal); box-shadow: 0 0 6px var(--color-goal);"></div> 目標路徑</div>
+        </div>
+    </div>
+
+    <script>
+        // --- 狀態定義 [船, 爸, 媽, 兒1, 兒2, 女1, 女2, 僕, 狗] ---
+        const START_STATE = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+        const GOAL_STATE = [1, 1, 1, 1, 1, 1, 1, 1, 1];
+
+        // 規則檢驗
+        function isValid(s) {
+            const [B, F, M, S1, S2, D1, D2, V, G] = s;
+            if (G !== V) {
+                if (G === 0 && (F===0 || M===0 || S1===0 || S2===0 || D1===0 || D2===0)) return false;
+                if (G === 1 && (F===1 || M===1 || S1===1 || S2===1 || D1===1 || D2===1)) return false;
+            }
+            if (F !== M) {
+                if (F === 0 && (D1===0 || D2===0)) return false;
+                if (F === 1 && (D1===1 || D2===1)) return false;
+            }
+            return true;
+        }
+
+        function getSuccessors(s) {
+            let successors = [];
+            let B = s[0];
+            let drivers = [1, 2, 7]; // 爸, 媽, 僕
+            for (let i = 1; i <= 8; i++) {
+                for (let j = i; j <= 8; j++) {
+                    if (s[i] === B && s[j] === B) {
+                        if (drivers.includes(i) || drivers.includes(j)) {
+                            let newState = [...s];
+                            newState[0] = 1 - B;
+                            newState[i] = 1 - B;
+                            newState[j] = 1 - B;
+                            successors.push(newState);
+                        }
+                    }
+                }
+            }
+            return successors;
+        }
+
+        function heuristic(s) {
+            let leftCount = 0;
+            for(let i=1; i<=8; i++) { if(s[i] === 0) leftCount++; }
+            return leftCount; 
+        }
+
+        // --- 核心繪圖引擎 (Canvas 自動縮放) ---
+        class SearchEngine {
+            constructor(type, canvasId) {
+                this.type = type; 
+                this.canvas = document.getElementById(canvasId);
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.nodes = []; 
+                this.visited = new Set();
+                this.queue = []; 
+                this.isDone = false;
+                
+                this.stats = { explored: 0, maxDepth: 0 };
+                this.levelCounts = {}; 
+                
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+
+                let root = this.createNode(START_STATE, null, 0);
+                this.queue.push(root);
+                this.nodes.push(root);
+                this.visited.add(root.id);
+            }
+
+            resizeCanvas() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.canvas.width = rect.width * 2;
+                this.canvas.height = rect.height * 2;
+                this.ctx.scale(2, 2);
+                this.render();
+            }
+
+            createNode(state, parent, depth) {
+                let id = state.join('');
+                if (!this.levelCounts[depth]) this.levelCounts[depth] = 0;
+                
+                let node = {
+                    id: id, state: state, parent: parent, depth: depth,
+                    status: 'frontier', 
+                    g: depth, h: heuristic(state),
+                    x: 0, y: 0, // 將在 render 時動態計算
+                    levelIndex: this.levelCounts[depth]++
+                };
+                node.f = node.g + node.h;
+                return node;
+            }
+
+            step() {
+                if (this.isDone || this.queue.length === 0) return;
+
+                let current;
+                if (this.type === 'BFS') {
+                    current = this.queue.shift(); 
+                } else {
+                    this.queue.sort((a, b) => a.f === b.f ? b.g - a.g : a.f - b.f);
+                    current = this.queue.shift();
+                }
+
+                current.status = 'explored';
+                this.stats.explored++;
+                if (current.depth > this.stats.maxDepth) this.stats.maxDepth = current.depth;
+
+                if (current.id === GOAL_STATE.join('')) {
+                    current.status = 'goal';
+                    this.isDone = true;
+                    this.highlightPath(current);
+                    this.updateUI();
+                    this.render();
+                    return;
+                }
+
+                let successors = getSuccessors(current.state);
+                for (let succ of successors) {
+                    let isVal = isValid(succ);
+                    let succId = succ.join('');
+                    let child = this.createNode(succ, current, current.depth + 1);
+                    
+                    if (!isVal) {
+                        child.status = 'invalid';
+                        this.nodes.push(child);
+                    } else if (this.visited.has(succId)) {
+                        child.status = 'visited';
+                        this.nodes.push(child);
+                    } else {
+                        this.visited.add(succId);
+                        this.queue.push(child);
+                        this.nodes.push(child);
+                    }
+                }
+
+                this.updateUI();
+                this.render();
+            }
+
+            highlightPath(node) {
+                let curr = node;
+                while(curr) {
+                    curr.status = 'goal';
+                    curr = curr.parent;
+                }
+            }
+
+            updateUI() {
+                let prefix = this.type === 'BFS' ? 'bfs' : 'astar';
+                document.getElementById(`${prefix}-stats`).innerText = `探索: ${this.stats.explored} | 深度: ${this.stats.maxDepth}`;
+            }
+
+            render() {
+                let rect = this.canvas.parentElement.getBoundingClientRect();
+                let w = rect.width;
+                let h = rect.height;
+                this.ctx.clearRect(0, 0, w, h);
+                
+                // 動態計算 Y 軸垂直間距
+                let maxD = Math.max(1, this.stats.maxDepth);
+                let ySpacing = Math.min(50, (h - 50) / maxD); 
+
+                Object.keys(this.levelCounts).forEach(depth => {
+                    let totalInLevel = this.levelCounts[depth];
+                    let levelNodes = this.nodes.filter(n => n.depth == depth);
+                    
+                    // 動態計算 X 軸水平間距
+                    let xSpacing = w / (totalInLevel + 1);
+                    
+                    levelNodes.forEach((n, idx) => {
+                        let targetX = xSpacing * (idx + 1);
+                        n.x = this.type === 'ASTAR' ? targetX * 0.85 + (w/2) * 0.15 : targetX;
+                        n.y = depth * ySpacing + 25; // 頂部留 25px 空白
+                    });
+                });
+
+                // 繪製連線 (貝茲曲線)
+                this.ctx.lineWidth = 1.2;
+                this.nodes.forEach(n => {
+                    if (n.parent) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(n.parent.x, n.parent.y);
+                        let midY = (n.parent.y + n.y) / 2;
+                        this.ctx.bezierCurveTo(n.parent.x, midY, n.x, midY, n.x, n.y);
+                        
+                        if (n.status === 'goal') { 
+                            this.ctx.strokeStyle = '#f39c12'; 
+                            this.ctx.lineWidth = 2.5; 
+                        } else if (n.status === 'invalid') {
+                            this.ctx.strokeStyle = 'rgba(231, 76, 60, 0.15)';
+                        } else {
+                            this.ctx.strokeStyle = 'rgba(189, 195, 199, 0.4)';
+                        }
+                        this.ctx.stroke();
+                        this.ctx.lineWidth = 1.2;
+                    }
+                });
+
+                // 繪製節點
+                const colors = {
+                    'frontier': '#3498db',
+                    'explored': '#2ecc71',
+                    'invalid': '#e74c3c',
+                    'visited': '#bdc3c7',
+                    'goal': '#f39c12'
+                };
+
+                // 先畫普通節點
+                this.nodes.filter(n => n.status !== 'goal').forEach(n => {
+                    this.ctx.beginPath();
+                    this.ctx.arc(n.x, n.y, 2.5, 0, Math.PI * 2);
+                    this.ctx.fillStyle = colors[n.status];
+                    this.ctx.fill();
+                });
+
+                // 後畫目標節點，並加上發光陰影
+                this.nodes.filter(n => n.status === 'goal').forEach(n => {
+                    this.ctx.beginPath();
+                    this.ctx.arc(n.x, n.y, 4, 0, Math.PI * 2);
+                    this.ctx.fillStyle = colors[n.status];
+                    this.ctx.shadowBlur = 6;
+                    this.ctx.shadowColor = '#f39c12';
+                    this.ctx.fill();
+                    this.ctx.shadowBlur = 0; 
+                });
+            }
+        }
+
+        let bfsEngine, astarEngine;
+        let timer;
+
+        function startSearch() {
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('startBtn').innerText = "動態運算中...";
+            
+            bfsEngine = new SearchEngine('BFS', 'canvas-bfs');
+            astarEngine = new SearchEngine('ASTAR', 'canvas-astar');
+            
+            timer = setInterval(() => {
+                if (bfsEngine.isDone && astarEngine.isDone) {
+                    clearInterval(timer);
+                    document.getElementById('startBtn').innerText = "✅ 運算完成！";
+                    return;
+                }
+                
+                // 加速渲染
+                for(let i = 0; i < 4; i++) {
+                    if(!bfsEngine.isDone) bfsEngine.step();
+                    if(!astarEngine.isDone) astarEngine.step();
+                }
+            }, 30);
+        }
+    </script>
+</body>
+</html>
